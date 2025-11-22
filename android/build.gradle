@@ -31,17 +31,21 @@ allprojects {
 }
 
 subprojects {
+    if (!project.ext.has('flutter')) {
+        project.ext.flutter = rootProject.ext.flutter
+    }
+
     project.plugins.whenPluginAdded { plugin ->
         if (plugin.class.name.startsWith("com.android.build.gradle.")) {
             project.android {
                 if (!project.android.hasProperty("compileSdkVersion") || project.android.compileSdkVersion == null) {
-                    compileSdkVersion 34
+                    compileSdkVersion rootProject.ext.flutter.compileSdkVersion
                 }
                 defaultConfig {
                     if (!defaultConfig.hasProperty("minSdkVersion") || defaultConfig.minSdkVersion == null) {
-                        minSdk 21
+                        minSdk rootProject.ext.flutter.minSdkVersion
                     }
-                    targetSdk 34
+                    targetSdk rootProject.ext.flutter.targetSdkVersion
                 }
             }
         }
