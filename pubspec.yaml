@@ -26,9 +26,6 @@ dependencies:
   
   # Charts & Visualization
   fl_chart: ^0.65.0
-  
-  # Icons
-  lucide_icons: ^0.257.0
 
 dev_dependencies:
   flutter_test:
