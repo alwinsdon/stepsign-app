@@ -1,0 +1,106 @@
+================================================================================
+                    STEPSIGN FLUTTER APP - HOW TO RUN
+================================================================================
+
+IMPORTANT: Flutter is NOT installed on your system.
+
+You have 2 options:
+
+================================================================================
+OPTION 1: BUILD WITH GITHUB (RECOMMENDED - NO FLUTTER NEEDED)
+================================================================================
+
+1. Create a GitHub repository
+
+2. Push this code:
+   
+   git init
+   git add .
+   git commit -m "Initial commit: StepSign Flutter app"
+   git remote add origin https://github.com/YOUR_USERNAME/stepsign-flutter.git
+   git push -u origin main
+
+3. Go to your GitHub repository
+
+4. Click "Actions" tab
+
+5. Wait for build to complete (5-10 minutes)
+
+6. Download "android-apk" artifact
+
+7. Install APK on Android device
+
+DONE! No Flutter installation needed.
+
+================================================================================
+OPTION 2: RUN LOCALLY WITH VS CODE (REQUIRES FLUTTER INSTALL)
+================================================================================
+
+1. Install Flutter SDK:
+   - Download: https://docs.flutter.dev/get-started/install/windows
+   - Extract to: C:\src\flutter
+   - Add to PATH: C:\src\flutter\bin
+   - Restart terminal
+
+2. Run setup script:
+   
+   .\setup-flutter-windows.ps1
+
+3. Install VS Code extensions:
+   - Open VS Code
+   - Extensions (Ctrl+Shift+X)
+   - Install "Flutter" by Dart Code
+   - Install "Dart" by Dart Code
+
+4. Open project:
+   - File → Open Folder
+   - Select this directory
+
+5. Run app:
+   - Press F5
+   - Or click Run → Start Debugging
+
+DONE! App will launch in emulator/device.
+
+================================================================================
+QUICK COMMANDS (if Flutter is installed)
+================================================================================
+
+flutter pub get          # Install dependencies
+flutter run              # Run app
+flutter build apk        # Build Android APK
+flutter build web        # Build web version
+
+================================================================================
+FILES CREATED FOR YOU
+================================================================================
+
+✓ .github/workflows/flutter-build.yml  - GitHub Actions workflow
+✓ setup-flutter-windows.ps1            - PowerShell setup script
+✓ setup.bat                            - Batch setup script
+✓ RUN_INSTRUCTIONS.md                  - Detailed instructions
+✓ SETUP_WITHOUT_FLUTTER.md             - GitHub build guide
+✓ All Flutter code files               - Ready to run
+
+================================================================================
+NEED HELP?
+================================================================================
+
+Read these files (in order):
+1. RUN_INSTRUCTIONS.md     - How to run (START HERE)
+2. SETUP_WITHOUT_FLUTTER.md - Build without Flutter
+3. QUICKSTART.md           - Quick setup guide
+4. README.md               - Project overview
+
+================================================================================
+RECOMMENDED: Use GitHub Actions (Option 1)
+================================================================================
+
+Why? Because:
+- No Flutter installation needed
+- Builds in the cloud
+- Download ready-to-install APK
+- Takes only 20 minutes total
+
+================================================================================
+
