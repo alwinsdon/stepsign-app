@@ -42,33 +42,35 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
 
-  build-ios:
-    name: Build iOS (macOS only)
-    runs-on: macos-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.0'
-          channel: 'stable'
-          cache: false
-      
-      - name: Get dependencies
-        run: flutter pub get
-      
-      - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
-      
-      - name: Upload iOS build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-build
-          path: build/ios/iphoneos/Runner.app
-          retention-days: 30
+  # iOS build disabled - not configured yet
+  # Uncomment and configure ios/ directory to enable iOS builds
+  # build-ios:
+  #   name: Build iOS (macOS only)
+  #   runs-on: macos-latest
+  #   
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     
+  #     - name: Setup Flutter
+  #       uses: subosito/flutter-action@v2
+  #       with:
+  #         flutter-version: '3.24.0'
+  #         channel: 'stable'
+  #         cache: false
+  #     
+  #     - name: Get dependencies
+  #       run: flutter pub get
+  #     
+  #     - name: Build iOS (no codesign)
+  #       run: flutter build ios --release --no-codesign
+  #     
+  #     - name: Upload iOS build
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: ios-build
+  #         path: build/ios/iphoneos/Runner.app
+  #         retention-days: 30
 
   build-web:
     name: Build Web
