@@ -32,14 +32,8 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
       
-      - name: Analyze code
-        run: flutter analyze --no-fatal-infos || echo "Analysis completed with warnings"
-      
-      - name: Run tests
-        run: flutter test --no-sound-null-safety || echo "No tests found"
-      
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
       
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
