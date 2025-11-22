@@ -74,7 +74,9 @@ app.*.map.json
 
 # Web
 /web/flutter_service_worker.js
-/web/index.html
+# Keep custom HTML + icons under version control
+!/web/index.html
+!/web/icons/
 /web/main.dart.js
 /web/main.dart.js.map
 
