@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:stepsign_mobile_app/widgets/heatmap_mini.dart';
-import 'package:stepsign_mobile_app/widgets/gradient_button.dart';
+import '../widgets/heatmap_mini.dart';
+import '../widgets/gradient_button.dart';
 
 class DashboardScreen extends StatelessWidget {
   final Function(String) onNavigate;

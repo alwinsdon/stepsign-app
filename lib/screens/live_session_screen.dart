@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:stepsign_mobile_app/widgets/heatmap_full.dart';
-import 'package:stepsign_mobile_app/widgets/imu_orientation_mini.dart';
+import '../widgets/heatmap_full.dart';
+import '../widgets/imu_orientation_mini.dart';
 
 class LiveSessionScreen extends StatefulWidget {
   final VoidCallback onBack;

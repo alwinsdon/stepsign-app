@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:stepsign_mobile_app/widgets/gradient_button.dart';
+import '../widgets/gradient_button.dart';
 
 class PairingScreen extends StatefulWidget {
   final VoidCallback onComplete;

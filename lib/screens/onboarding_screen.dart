@@ -6,7 +6,9 @@ import '../widgets/permission_card.dart';
 import '../widgets/heatmap_preview.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final VoidCallback onComplete;
+
+  const OnboardingScreen({super.key, required this.onComplete});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -39,8 +41,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else if (_canProceed) {
-      // Navigate to next screen (Pairing/Dashboard)
-      // Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => DashboardScreen()));
+      widget.onComplete();
     }
   }
 
