@@ -1,3 +1,5 @@
+import com.android.build.gradle.BaseExtension
+
 buildscript {
     ext.kotlin_version = '1.9.10'
     repositories {
@@ -37,12 +39,12 @@ subprojects {
 
     project.plugins.whenPluginAdded { plugin ->
         if (plugin.class.name.startsWith("com.android.build.gradle.")) {
-            project.android {
-                if (!project.android.hasProperty("compileSdkVersion") || project.android.compileSdkVersion == null) {
-                    compileSdkVersion rootProject.ext.flutter.compileSdkVersion
+            project.extensions.configure(BaseExtension) { androidExt ->
+                if (androidExt.compileSdkVersion == null) {
+                    androidExt.compileSdkVersion rootProject.ext.flutter.compileSdkVersion
                 }
-                defaultConfig {
-                    if (!defaultConfig.hasProperty("minSdkVersion") || defaultConfig.minSdkVersion == null) {
+                androidExt.defaultConfig {
+                    if (minSdkVersion == null) {
                         minSdk rootProject.ext.flutter.minSdkVersion
                     }
                     targetSdk rootProject.ext.flutter.targetSdkVersion
