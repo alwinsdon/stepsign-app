@@ -135,22 +135,22 @@ class _HeatmapPainter extends CustomPainter {
       textAlign: TextAlign.left,
     );
 
-    final sensors = [
-      {'x': 50.0, 'y': 30.0, 'label': 'Toes', 'labelX': 60.0},
-      {'x': 50.0, 'y': 80.0, 'label': 'Ball', 'labelX': 60.0},
-      {'x': 45.0, 'y': 140.0, 'label': 'Arch', 'labelX': 15.0},
-      {'x': 50.0, 'y': 200.0, 'label': 'Heel', 'labelX': 60.0},
+    const sensors = [
+      _SensorMarker(x: 50, y: 30, label: 'Toes', labelX: 60),
+      _SensorMarker(x: 50, y: 80, label: 'Ball', labelX: 60),
+      _SensorMarker(x: 45, y: 140, label: 'Arch', labelX: 15),
+      _SensorMarker(x: 50, y: 200, label: 'Heel', labelX: 60),
     ];
 
     for (final sensor in sensors) {
       canvas.drawCircle(
-        Offset(sensor['x']! * scaleX, sensor['y']! * scaleY),
+        Offset(sensor.x * scaleX, sensor.y * scaleY),
         4,
         markerPaint,
       );
 
       textPainter.text = TextSpan(
-        text: sensor['label'] as String,
+        text: sensor.label,
         style: const TextStyle(
           color: Color(0xFF94A3B8),
           fontSize: 10,
@@ -159,7 +159,7 @@ class _HeatmapPainter extends CustomPainter {
       textPainter.layout();
       textPainter.paint(
         canvas,
-        Offset(sensor['labelX']! * scaleX, (sensor['y']! - 3) * scaleY),
+        Offset(sensor.labelX * scaleX, (sensor.y - 3) * scaleY),
       );
     }
   }
@@ -200,5 +200,19 @@ class _HeatmapPainter extends CustomPainter {
         oldDelegate.ballIntensity != ballIntensity ||
         oldDelegate.toesIntensity != toesIntensity;
   }
+}
+
+class _SensorMarker {
+  final double x;
+  final double y;
+  final double labelX;
+  final String label;
+
+  const _SensorMarker({
+    required this.x,
+    required this.y,
+    required this.labelX,
+    required this.label,
+  });
 }
 
