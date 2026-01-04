@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import '../widgets/gradient_button.dart';
+import '../services/ble_service.dart';
+import '../models/sensor_data.dart';
 
 class PairingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -18,18 +19,17 @@ class PairingScreen extends StatefulWidget {
 }
 
 class _PairingScreenState extends State<PairingScreen> with SingleTickerProviderStateMixin {
-  bool _isScanning = false;
-  bool _isConnected = false;
+  final BleService _bleService = BleService();
+  
   bool _isCalibrating = false;
   int _calibrationStep = 0;
   String _selectedStreamingMode = '50Hz';
-  
-  final List<Map<String, dynamic>> _devices = [];
-  Map<String, dynamic>? _selectedDevice;
+  bool _isConnecting = false;
+  String? _connectingDeviceId;
   
   late AnimationController _scanAnimationController;
-  Timer? _scanTimer;
-  final _random = math.Random();
+  StreamSubscription? _sensorSubscription;
+  SensorFrame? _calibrationFrame;
 
   @override
   void initState() {
@@ -38,50 +38,54 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
+    
+    // Listen to BLE service changes
+    _bleService.addListener(_onBleStateChanged);
   }
 
   @override
   void dispose() {
     _scanAnimationController.dispose();
-    _scanTimer?.cancel();
+    _bleService.removeListener(_onBleStateChanged);
+    _sensorSubscription?.cancel();
     super.dispose();
   }
 
-  void _startScanning() {
-    setState(() {
-      _isScanning = true;
-      _devices.clear();
-    });
-
-    // Simulate device discovery
-    _scanTimer = Timer.periodic(const Duration(milliseconds: 800), (timer) {
-      if (_devices.length < 5) {
-        setState(() {
-          _devices.add({
-            'name': 'StepSign ${['Left', 'Right'][_random.nextInt(2)]} #${_devices.length + 1}',
-            'rssi': -40 - _random.nextInt(30),
-            'battery': 70 + _random.nextInt(30),
-            'firmware': 'v1.2.${_random.nextInt(5)}',
-          });
-        });
-      } else {
-        _stopScanning();
-      }
-    });
+  void _onBleStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
-  void _stopScanning() {
-    _scanTimer?.cancel();
-    setState(() {
-      _isScanning = false;
-    });
+  Future<void> _startScanning() async {
+    await _bleService.startScan(timeout: const Duration(seconds: 15));
   }
 
-  void _connectToDevice(Map<String, dynamic> device) {
+  Future<void> _stopScanning() async {
+    await _bleService.stopScan();
+  }
+
+  Future<void> _connectToDevice(DiscoveredDevice device) async {
     setState(() {
-      _selectedDevice = device;
-      _isConnected = true;
+      _isConnecting = true;
+      _connectingDeviceId = device.id;
     });
+
+    final success = await _bleService.connect(device);
+    
+    setState(() {
+      _isConnecting = false;
+      _connectingDeviceId = null;
+    });
+
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to connect: ${_bleService.errorMessage ?? "Unknown error"}'),
+          backgroundColor: const Color(0xFFEF4444),
+        ),
+      );
+    }
   }
 
   void _startCalibration() {
@@ -89,17 +93,37 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
       _isCalibrating = true;
       _calibrationStep = 0;
     });
+
+    // Subscribe to sensor data during calibration
+    _sensorSubscription?.cancel();
+    _sensorSubscription = _bleService.sensorDataStream.listen((frame) {
+      setState(() {
+        _calibrationFrame = frame;
+      });
+    });
+
+    // Trigger haptic feedback to indicate calibration started
+    _bleService.tapHaptic();
   }
 
   void _nextCalibrationStep() {
+    // Trigger haptic feedback on each step
+    _bleService.tapHaptic();
+
     if (_calibrationStep < 3) {
       setState(() {
         _calibrationStep++;
       });
     } else {
+      _sensorSubscription?.cancel();
+      // Strong haptic to indicate completion
+      _bleService.strongHaptic();
       widget.onComplete();
     }
   }
+
+  bool get _isConnected => _bleService.connectionState == BleConnectionState.connected;
+  bool get _isScanning => _bleService.connectionState == BleConnectionState.scanning;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +164,31 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
               ),
               const SizedBox(height: 32),
 
+              // Error message if any
+              if (_bleService.errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Color(0xFFEF4444)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _bleService.errorMessage!,
+                          style: const TextStyle(color: Color(0xFFEF4444)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               if (!_isConnected) ...[
                 // Scanning Section
                 Center(
@@ -173,9 +222,9 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                             Container(
                               width: 80,
                               height: 80,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: const LinearGradient(
+                                gradient: LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                   colors: [
@@ -195,9 +244,20 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        _isScanning ? 'Scanning for devices...' : 'Ready to scan',
+                        _isScanning 
+                            ? 'Scanning for StepSign devices...' 
+                            : 'Ready to scan',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
+                      if (_isScanning) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Found ${_bleService.discoveredDevices.length} device(s)',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF94A3B8),
+                              ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -230,25 +290,29 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                 const SizedBox(height: 32),
 
                 // Device List
-                if (_devices.isNotEmpty) ...[
+                if (_bleService.discoveredDevices.isNotEmpty) ...[
                   Text(
                     'Available Devices',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 16),
-                  ...List.generate(_devices.length, (index) {
-                    final device = _devices[index];
+                  ...List.generate(_bleService.discoveredDevices.length, (index) {
+                    final device = _bleService.discoveredDevices[index];
+                    final isConnecting = _isConnecting && _connectingDeviceId == device.id;
+                    
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: GestureDetector(
-                        onTap: () => _connectToDevice(device),
+                        onTap: isConnecting ? null : () => _connectToDevice(device),
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E293B).withOpacity(0.5),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF334155).withOpacity(0.5),
+                              color: isConnecting 
+                                  ? const Color(0xFF06B6D4)
+                                  : const Color(0xFF334155).withOpacity(0.5),
                             ),
                           ),
                           child: Row(
@@ -260,10 +324,18 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                                   color: const Color(0xFF06B6D4).withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Icon(
-                                  Icons.bluetooth,
-                                  color: Color(0xFF06B6D4),
-                                ),
+                                child: isConnecting
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF06B6D4),
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.bluetooth,
+                                        color: Color(0xFF06B6D4),
+                                      ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
@@ -271,7 +343,7 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      device['name'],
+                                      device.name,
                                       style: Theme.of(context).textTheme.titleMedium,
                                     ),
                                     const SizedBox(height: 4),
@@ -280,24 +352,11 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                                         Icon(
                                           Icons.signal_cellular_alt,
                                           size: 14,
-                                          color: _getRSSIColor(device['rssi']),
+                                          color: _getRSSIColor(device.rssi),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '${device['rssi']} dBm',
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                color: const Color(0xFF94A3B8),
-                                              ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        const Icon(
-                                          Icons.battery_std,
-                                          size: 14,
-                                          color: Color(0xFF22C55E),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${device['battery']}%',
+                                          '${device.rssi} dBm',
                                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                                 color: const Color(0xFF94A3B8),
                                               ),
@@ -307,10 +366,18 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                                   ],
                                 ),
                               ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: Color(0xFF94A3B8),
-                              ),
+                              if (isConnecting)
+                                Text(
+                                  'Connecting...',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: const Color(0xFF06B6D4),
+                                      ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: Color(0xFF94A3B8),
+                                ),
                             ],
                           ),
                         ),
@@ -350,7 +417,7 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        _selectedDevice!['name'],
+                        _bleService.connectedDeviceName ?? 'StepSign Device',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               color: const Color(0xFF94A3B8),
                             ),
@@ -359,23 +426,23 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _DeviceInfo(
+                          _DeviceInfoWidget(
                             icon: Icons.battery_std,
                             label: 'Battery',
-                            value: '${_selectedDevice!['battery']}%',
+                            value: '${_bleService.deviceInfo?.batteryPercent ?? 100}%',
                             color: const Color(0xFF22C55E),
                           ),
-                          _DeviceInfo(
+                          _DeviceInfoWidget(
                             icon: Icons.system_update,
                             label: 'Firmware',
-                            value: _selectedDevice!['firmware'],
+                            value: _bleService.deviceInfo?.firmwareVersion ?? 'v1.0.0',
                             color: const Color(0xFF06B6D4),
                           ),
-                          _DeviceInfo(
-                            icon: Icons.signal_cellular_alt,
-                            label: 'Signal',
-                            value: '${_selectedDevice!['rssi']} dBm',
-                            color: _getRSSIColor(_selectedDevice!['rssi']),
+                          _DeviceInfoWidget(
+                            icon: Icons.speed,
+                            label: 'Rate',
+                            value: '${_bleService.deviceInfo?.sampleRateHz ?? 50}Hz',
+                            color: const Color(0xFFA855F7),
                           ),
                         ],
                       ),
@@ -428,11 +495,27 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
                   text: 'Start Calibration',
                   icon: Icons.tune,
                 ),
+
+                const SizedBox(height: 16),
+
+                // Skip calibration option
+                Center(
+                  child: TextButton(
+                    onPressed: widget.onComplete,
+                    child: Text(
+                      'Skip Calibration',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFF94A3B8),
+                          ),
+                    ),
+                  ),
+                ),
               ] else ...[
                 // Calibration Steps
                 _CalibrationStep(
                   step: _calibrationStep,
                   onNext: _nextCalibrationStep,
+                  sensorFrame: _calibrationFrame,
                 ),
               ],
             ],
@@ -449,13 +532,13 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
   }
 }
 
-class _DeviceInfo extends StatelessWidget {
+class _DeviceInfoWidget extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
   final Color color;
 
-  const _DeviceInfo({
+  const _DeviceInfoWidget({
     required this.icon,
     required this.label,
     required this.value,
@@ -541,10 +624,12 @@ class _StreamingModeButton extends StatelessWidget {
 class _CalibrationStep extends StatelessWidget {
   final int step;
   final VoidCallback onNext;
+  final SensorFrame? sensorFrame;
 
   const _CalibrationStep({
     required this.step,
     required this.onNext,
+    this.sensorFrame,
   });
 
   @override
@@ -599,9 +684,9 @@ class _CalibrationStep extends StatelessWidget {
         Container(
           width: 120,
           height: 120,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
@@ -639,6 +724,59 @@ class _CalibrationStep extends StatelessWidget {
               ),
           textAlign: TextAlign.center,
         ),
+        
+        // Live sensor feedback during calibration
+        if (sensorFrame != null) ...[
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B).withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFF334155).withOpacity(0.5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Live Sensor Data',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: const Color(0xFF06B6D4),
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _SensorValue(
+                      label: 'Heel',
+                      value: sensorFrame!.pressureMap['heel']!.toStringAsFixed(0),
+                      unit: '%',
+                    ),
+                    _SensorValue(
+                      label: 'Arch',
+                      value: sensorFrame!.pressureMap['arch']!.toStringAsFixed(0),
+                      unit: '%',
+                    ),
+                    _SensorValue(
+                      label: 'Ball',
+                      value: sensorFrame!.pressureMap['ball']!.toStringAsFixed(0),
+                      unit: '%',
+                    ),
+                    _SensorValue(
+                      label: 'Toes',
+                      value: sensorFrame!.pressureMap['toes']!.toStringAsFixed(0),
+                      unit: '%',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        
         const SizedBox(height: 48),
 
         // Next Button
@@ -652,3 +790,45 @@ class _CalibrationStep extends StatelessWidget {
   }
 }
 
+class _SensorValue extends StatelessWidget {
+  final String label;
+  final String value;
+  final String unit;
+
+  const _SensorValue({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF94A3B8),
+              ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              value,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              unit,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF94A3B8),
+                  ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}

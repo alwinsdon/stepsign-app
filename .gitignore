@@ -83,3 +83,13 @@ app.*.map.json
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 
+
+# PlatformIO
+.pio/
+.pio-venv/
+
+# Local tools
+android/.gradle/
+android/local.properties
+android/gradlew*
+android/gradle/wrapper/*.jar
