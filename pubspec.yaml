@@ -26,14 +26,22 @@ dependencies:
   
   # BLE Communication
   flutter_blue_plus: ^1.31.0
+  
+  # HTTP Client
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+  
+  # Assets
+  assets:
+    - assets/images/step_token_logo.png
   
   # Add custom fonts if needed
   # fonts:
@@ -42,4 +50,12 @@ flutter:
   #       - asset: fonts/Roboto-Regular.ttf
   #       - asset: fonts/Roboto-Bold.ttf
   #         weight: 700
+
+# Flutter Launcher Icons Configuration
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/step_token_logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/step_token_logo.png"
 
