@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/sensor_data.dart';
 
 /// Connection state for the BLE device
@@ -99,6 +100,22 @@ class BleService extends ChangeNotifier {
     _setConnectionState(BleConnectionState.scanning);
 
     try {
+      // Request permissions first
+      final bluetoothStatus = await Permission.bluetoothScan.request();
+      final locationStatus = await Permission.location.request();
+      
+      if (!bluetoothStatus.isGranted) {
+        _errorMessage = 'Bluetooth permission denied. Please enable in Settings.';
+        _setConnectionState(BleConnectionState.error);
+        return;
+      }
+      
+      if (!locationStatus.isGranted) {
+        _errorMessage = 'Location permission denied. Required for BLE scanning.';
+        _setConnectionState(BleConnectionState.error);
+        return;
+      }
+
       // Check Bluetooth state
       final isAvailable = await isBluetoothAvailable();
       if (!isAvailable) {
@@ -140,10 +157,11 @@ class BleService extends ChangeNotifier {
         }
       });
 
-      // Start scanning with service filter
+      // Start scanning (without service filter for now to see all devices)
+      // TODO: Re-enable service filter once ESP32 is confirmed advertising
       await FlutterBluePlus.startScan(
         timeout: timeout,
-        withServices: [Guid(StepSignBleUuids.serviceUuid)],
+        // withServices: [Guid(StepSignBleUuids.serviceUuid)], // Temporarily disabled
       );
 
       // Wait for scan to complete

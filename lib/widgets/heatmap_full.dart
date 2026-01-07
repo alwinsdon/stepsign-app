@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
+import 'insole_cad_path.dart';
 
 class HeatmapFull extends StatelessWidget {
   final Map<String, double> sensorData;
@@ -61,136 +63,82 @@ class _HeatmapPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scaleX = size.width / 100;
-    final scaleY = size.height / 240;
+    // Use exact CAD path from the shared insole path
+    final scaleX = size.width / InsoleCadPath.viewBoxWidth;
+    final scaleY = size.height / InsoleCadPath.viewBoxHeight;
+
+    // Save canvas state for rotation
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(math.pi); // 180° rotation
+    canvas.translate(-size.width / 2, -size.height / 2);
+
+    // Translate for viewBox offset
+    canvas.translate(-InsoleCadPath.viewBoxX * scaleX, -InsoleCadPath.viewBoxY * scaleY);
+
+    // Parse and draw the exact CAD path
+    final path = InsoleCadPath.parsePath(scaleX, scaleY);
+
+    // Draw insole fill
+    final fillPaint = Paint()
+      ..color = const Color(0xFF0A0E1A)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
 
     // Draw insole outline
     final outlinePaint = Paint()
-      ..color = const Color(0xFF475569)
+      ..color = const Color(0xFF06B6D4).withOpacity(0.6)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
-
-    final fillPaint = Paint()
-      ..color = const Color(0xFF0F172A)
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-    path.moveTo(30 * scaleX, 10 * scaleY);
-    path.quadraticBezierTo(20 * scaleX, 40 * scaleY, 25 * scaleX, 100 * scaleY);
-    path.quadraticBezierTo(30 * scaleX, 140 * scaleY, 35 * scaleX, 180 * scaleY);
-    path.quadraticBezierTo(40 * scaleX, 220 * scaleY, 50 * scaleX, 235 * scaleY);
-    path.quadraticBezierTo(60 * scaleX, 220 * scaleY, 65 * scaleX, 180 * scaleY);
-    path.quadraticBezierTo(70 * scaleX, 140 * scaleY, 75 * scaleX, 100 * scaleY);
-    path.quadraticBezierTo(80 * scaleX, 40 * scaleY, 70 * scaleX, 10 * scaleY);
-    path.quadraticBezierTo(50 * scaleX, 5 * scaleY, 30 * scaleX, 10 * scaleY);
-    path.close();
-
-    canvas.drawPath(path, fillPaint);
     canvas.drawPath(path, outlinePaint);
 
-    // Draw pressure regions with radial gradients
-    _drawPressureZone(
-      canvas,
-      Offset(50 * scaleX, 30 * scaleY),
-      25 * scaleX + toesIntensity * 5 * scaleX,
-      32 * scaleY + toesIntensity * 8 * scaleY,
-      getColor(toesIntensity),
-      toesIntensity,
-    );
+    // Draw pressure zones using the same CAD coordinates
+    final zones = [
+      {'zone': 'heel', 'intensity': heelIntensity},
+      {'zone': 'arch', 'intensity': archIntensity},
+      {'zone': 'ball', 'intensity': ballIntensity},
+      {'zone': 'toes', 'intensity': toesIntensity},
+    ];
 
-    _drawPressureZone(
-      canvas,
-      Offset(50 * scaleX, 80 * scaleY),
-      28 * scaleX + ballIntensity * 5 * scaleX,
-      38 * scaleY + ballIntensity * 8 * scaleY,
-      getColor(ballIntensity),
-      ballIntensity,
-    );
+    for (final zoneData in zones) {
+      final zoneName = zoneData['zone'] as String;
+      final intensity = zoneData['intensity'] as double;
+      final zone = InsoleCadPath.sensorZones[zoneName]!;
+      
+      final cx = zone['cx']! * scaleX;
+      final cy = zone['cy']! * scaleY;
+      final rx = (zone['rx']! + intensity * 5) * scaleX;
+      final ry = (zone['ry']! + intensity * 5) * scaleY;
 
-    _drawPressureZone(
-      canvas,
-      Offset(45 * scaleX, 140 * scaleY),
-      22 * scaleX + archIntensity * 4 * scaleX,
-      32 * scaleY + archIntensity * 6 * scaleY,
-      getColor(archIntensity),
-      archIntensity,
-    );
+      final paint = Paint()
+        ..color = getColor(intensity).withOpacity(intensity * 0.9)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
 
-    _drawPressureZone(
-      canvas,
-      Offset(50 * scaleX, 200 * scaleY),
-      30 * scaleX + heelIntensity * 6 * scaleX,
-      38 * scaleY + heelIntensity * 10 * scaleY,
-      getColor(heelIntensity),
-      heelIntensity,
-    );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, cy),
+          width: rx * 2,
+          height: ry * 2,
+        ),
+        paint,
+      );
+    }
 
-    // Draw sensor markers
-    final markerPaint = Paint()
+    // Draw sensor indicators
+    final sensorPaint = Paint()
       ..color = const Color(0xFF06B6D4).withOpacity(0.8)
       ..style = PaintingStyle.fill;
 
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.left,
-    );
-
-    const sensors = [
-      _SensorMarker(x: 50, y: 30, label: 'Toes', labelX: 60),
-      _SensorMarker(x: 50, y: 80, label: 'Ball', labelX: 60),
-      _SensorMarker(x: 45, y: 140, label: 'Arch', labelX: 15),
-      _SensorMarker(x: 50, y: 200, label: 'Heel', labelX: 60),
-    ];
-
-    for (final sensor in sensors) {
+    for (final zoneName in InsoleCadPath.sensorZones.keys) {
+      final zone = InsoleCadPath.sensorZones[zoneName]!;
       canvas.drawCircle(
-        Offset(sensor.x * scaleX, sensor.y * scaleY),
+        Offset(zone['cx']! * scaleX, zone['cy']! * scaleY),
         4,
-        markerPaint,
-      );
-
-      textPainter.text = TextSpan(
-        text: sensor.label,
-        style: const TextStyle(
-          color: Color(0xFF94A3B8),
-          fontSize: 10,
-        ),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(sensor.labelX * scaleX, (sensor.y - 3) * scaleY),
+        sensorPaint,
       );
     }
-  }
 
-  void _drawPressureZone(
-    Canvas canvas,
-    Offset center,
-    double radiusX,
-    double radiusY,
-    Color color,
-    double intensity,
-  ) {
-    final paint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          color.withOpacity(intensity * 0.8),
-          color.withOpacity(intensity * 0.4),
-          const Color(0xFF3B82F6).withOpacity(0.1),
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromCenter(
-        center: center,
-        width: radiusX * 2,
-        height: radiusY * 2,
-      ))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-
-    canvas.drawOval(
-      Rect.fromCenter(center: center, width: radiusX * 2, height: radiusY * 2),
-      paint,
-    );
+    canvas.restore();
   }
 
   @override
@@ -200,19 +148,5 @@ class _HeatmapPainter extends CustomPainter {
         oldDelegate.ballIntensity != ballIntensity ||
         oldDelegate.toesIntensity != toesIntensity;
   }
-}
-
-class _SensorMarker {
-  final double x;
-  final double y;
-  final double labelX;
-  final String label;
-
-  const _SensorMarker({
-    required this.x,
-    required this.y,
-    required this.labelX,
-    required this.label,
-  });
 }
 

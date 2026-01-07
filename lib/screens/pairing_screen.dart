@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../widgets/gradient_button.dart';
 import '../services/ble_service.dart';
+import '../services/storage_service.dart';
 import '../models/sensor_data.dart';
 
 class PairingScreen extends StatefulWidget {
@@ -106,7 +107,7 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
     _bleService.tapHaptic();
   }
 
-  void _nextCalibrationStep() {
+  void _nextCalibrationStep() async {
     // Trigger haptic feedback on each step
     _bleService.tapHaptic();
 
@@ -118,6 +119,14 @@ class _PairingScreenState extends State<PairingScreen> with SingleTickerProvider
       _sensorSubscription?.cancel();
       // Strong haptic to indicate completion
       _bleService.strongHaptic();
+      
+      // Save the connected device info
+      final connectedDevice = _bleService.connectedDevice;
+      if (connectedDevice != null) {
+        await StorageService.setPairedDeviceId(connectedDevice.remoteId.str);
+        await StorageService.setPairedDeviceName(_bleService.connectedDeviceName ?? 'StepSign Device');
+      }
+      
       widget.onComplete();
     }
   }

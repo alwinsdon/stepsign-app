@@ -91,5 +91,16 @@ app.*.map.json
 # Local tools
 android/.gradle/
 android/local.properties
-android/gradlew*
-android/gradle/wrapper/*.jar
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/*.db
+backend/.env
+
+# Archive docs
+docs/archive/
+
+# Build outputs
+*.apk
+*.aab

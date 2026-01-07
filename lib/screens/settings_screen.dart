@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import '../services/storage_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onBack;
+  final VoidCallback? onResetApp;
 
   const SettingsScreen({
     super.key,
     required this.onBack,
+    this.onResetApp,
   });
 
   @override
@@ -437,9 +440,137 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) => setState(() => _colorBlindMode = value),
             ),
           ),
+          const SizedBox(height: 24),
+          
+          // Reset Section
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: const Color(0xFFEF4444).withOpacity(0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: Color(0xFFEF4444)),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Reset Options',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: const Color(0xFFEF4444),
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _showResetDeviceDialog,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFF59E0B),
+                      side: const BorderSide(color: Color(0xFFF59E0B)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Unpair Device'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _showResetAppDialog,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFEF4444),
+                      side: const BorderSide(color: Color(0xFFEF4444)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Reset App (Clear All Data)'),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _showResetDeviceDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Unpair Device?'),
+        content: const Text(
+          'This will disconnect and forget your paired insoles. You will need to pair them again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Unpair',
+              style: TextStyle(color: Color(0xFFF59E0B)),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await StorageService.resetPairing();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Device unpaired successfully')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showResetAppDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: const Text('Reset App?'),
+        content: const Text(
+          'This will clear all app data including onboarding progress, permissions, and paired devices. You will need to set up the app again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Reset',
+              style: TextStyle(color: Color(0xFFEF4444)),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await StorageService.clearAll();
+      if (mounted && widget.onResetApp != null) {
+        widget.onResetApp!();
+      }
+    }
   }
 
   Widget _buildDeveloperTab() {

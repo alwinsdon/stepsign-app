@@ -3,10 +3,14 @@ import 'dart:math' as math;
 
 class HeatmapMini extends StatefulWidget {
   final bool isActive;
+  /// Optional real sensor data from BLE. If provided, uses this instead of random data.
+  /// Expected format: {'heel': 0-100, 'arch': 0-100, 'ball': 0-100, 'toes': 0-100}
+  final Map<String, double>? sensorData;
 
   const HeatmapMini({
     super.key,
     required this.isActive,
+    this.sensorData,
   });
 
   @override
@@ -16,8 +20,22 @@ class HeatmapMini extends StatefulWidget {
 class _HeatmapMiniState extends State<HeatmapMini>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  List<double> _sensorData = [0.3, 0.5, 0.7, 0.4];
+  List<double> _simulatedData = [0.3, 0.5, 0.7, 0.4];
   final _random = math.Random();
+  
+  /// Get the actual sensor data to display
+  List<double> get _sensorData {
+    if (widget.sensorData != null) {
+      // Convert from Map format (0-100) to List format (0-1)
+      return [
+        (widget.sensorData!['heel'] ?? 0) / 100.0,
+        (widget.sensorData!['arch'] ?? 0) / 100.0,
+        (widget.sensorData!['ball'] ?? 0) / 100.0,
+        (widget.sensorData!['toes'] ?? 0) / 100.0,
+      ];
+    }
+    return _simulatedData;
+  }
 
   @override
   void initState() {
@@ -26,9 +44,10 @@ class _HeatmapMiniState extends State<HeatmapMini>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     )..addListener(() {
-        if (widget.isActive) {
+        // Only generate random data if no external sensor data is provided
+        if (widget.isActive && widget.sensorData == null) {
           setState(() {
-            _sensorData = [
+            _simulatedData = [
               _random.nextDouble() * 0.5 + 0.3,
               _random.nextDouble() * 0.4 + 0.2,
               _random.nextDouble() * 0.6 + 0.4,
@@ -38,7 +57,7 @@ class _HeatmapMiniState extends State<HeatmapMini>
         }
       });
 
-    if (widget.isActive) {
+    if (widget.isActive && widget.sensorData == null) {
       _controller.repeat();
     }
   }
@@ -46,7 +65,10 @@ class _HeatmapMiniState extends State<HeatmapMini>
   @override
   void didUpdateWidget(HeatmapMini oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive != oldWidget.isActive) {
+    // When external sensor data is provided, stop the animation
+    if (widget.sensorData != null) {
+      _controller.stop();
+    } else if (widget.isActive != oldWidget.isActive) {
       if (widget.isActive) {
         _controller.repeat();
       } else {

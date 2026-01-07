@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'insole_cad_path.dart';
 
 class IMUOrientationMini extends StatelessWidget {
   final Map<String, double> imuData;
@@ -43,76 +44,11 @@ class IMUOrientationMini extends StatelessWidget {
                       ..rotateY(yaw * math.pi / 180)
                       ..rotateZ(roll * math.pi / 180),
                     alignment: Alignment.center,
-                    child: Container(
+                    child: SizedBox(
                       width: 80,
                       height: 160,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(40),
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFF06B6D4).withOpacity(0.3),
-                            const Color(0xFFA855F7).withOpacity(0.3),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: const Color(0xFF06B6D4).withOpacity(0.5),
-                          width: 2,
-                        ),
-                      ),
-                      child: Stack(
-                        children: [
-                          // Sensor dots
-                          Positioned(
-                            top: 16,
-                            left: 40 - 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF06B6D4),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 56,
-                            left: 40 - 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF06B6D4),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 96,
-                            left: 40 - 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF06B6D4),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 136,
-                            left: 40 - 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF06B6D4),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: CustomPaint(
+                        painter: _Insole3DPainter(),
                       ),
                     ),
                   ),
@@ -120,60 +56,39 @@ class IMUOrientationMini extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 32),
-          // Axis indicators
+          const SizedBox(height: 16),
+          // Angle displays
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _AxisIndicator(
-                color: const Color(0xFF06B6D4),
-                label: 'X',
-              ),
-              const SizedBox(width: 16),
-              _AxisIndicator(
-                color: const Color(0xFFA855F7),
-                label: 'Y',
-              ),
-              const SizedBox(width: 16),
-              _AxisIndicator(
-                color: const Color(0xFFEC4899),
-                label: 'Z',
-              ),
+              _buildAngleDisplay('Pitch', pitch, const Color(0xFF06B6D4)),
+              _buildAngleDisplay('Roll', roll, const Color(0xFFA855F7)),
+              _buildAngleDisplay('Yaw', yaw, const Color(0xFFEC4899)),
             ],
           ),
         ],
       ),
     );
   }
-}
-
-class _AxisIndicator extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _AxisIndicator({
-    required this.color,
-    required this.label,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
+  
+  Widget _buildAngleDisplay(String label, double value, Color color) {
+    return Column(
       children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF94A3B8),
+          style: TextStyle(
+            color: color,
             fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${value.toStringAsFixed(1)}°',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ],
@@ -181,21 +96,75 @@ class _AxisIndicator extends StatelessWidget {
   }
 }
 
+class _Insole3DPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Use exact CAD path from the shared insole path
+    final scaleX = size.width / InsoleCadPath.viewBoxWidth;
+    final scaleY = size.height / InsoleCadPath.viewBoxHeight;
+
+    // Save canvas state for rotation
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.rotate(math.pi); // 180° rotation to match the orientation
+    canvas.translate(-size.width / 2, -size.height / 2);
+
+    // Translate for viewBox offset
+    canvas.translate(-InsoleCadPath.viewBoxX * scaleX, -InsoleCadPath.viewBoxY * scaleY);
+
+    // Parse and draw the exact CAD path
+    final path = InsoleCadPath.parsePath(scaleX, scaleY);
+
+    // Draw insole fill with gradient
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          const Color(0xFF06B6D4).withOpacity(0.3),
+          const Color(0xFFA855F7).withOpacity(0.3),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
+
+    // Draw insole outline
+    final outlinePaint = Paint()
+      ..color = const Color(0xFF06B6D4).withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawPath(path, outlinePaint);
+
+    // Draw sensor indicators using the same CAD coordinates
+    final sensorPaint = Paint()
+      ..color = const Color(0xFF06B6D4)
+      ..style = PaintingStyle.fill;
+
+    for (final zoneName in InsoleCadPath.sensorZones.keys) {
+      final zone = InsoleCadPath.sensorZones[zoneName]!;
+      canvas.drawCircle(
+        Offset(zone['cx']! * scaleX, zone['cy']! * scaleY),
+        4,
+        sensorPaint,
+      );
+    }
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF475569).withOpacity(0.2)
-      ..strokeWidth = 0.5
-      ..style = PaintingStyle.stroke;
-
-    const gridSize = 10.0;
-    final rows = (size.height / gridSize).ceil();
-    final cols = (size.width / gridSize).ceil();
+      ..color = const Color(0xFF334155).withOpacity(0.3)
+      ..strokeWidth = 1;
 
     // Draw vertical lines
-    for (int i = 0; i <= cols; i++) {
-      final x = i * gridSize;
+    for (double x = 0; x <= size.width; x += size.width / 8) {
       canvas.drawLine(
         Offset(x, 0),
         Offset(x, size.height),
@@ -204,14 +173,29 @@ class _GridPainter extends CustomPainter {
     }
 
     // Draw horizontal lines
-    for (int i = 0; i <= rows; i++) {
-      final y = i * gridSize;
+    for (double y = 0; y <= size.height; y += size.height / 8) {
       canvas.drawLine(
         Offset(0, y),
         Offset(size.width, y),
         paint,
       );
     }
+
+    // Draw center crosshair
+    final centerPaint = Paint()
+      ..color = const Color(0xFF06B6D4).withOpacity(0.3)
+      ..strokeWidth = 1;
+
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      centerPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      centerPaint,
+    );
   }
 
   @override

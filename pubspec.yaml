@@ -29,6 +29,12 @@ dependencies:
   
   # HTTP Client
   http: ^1.1.0
+  
+  # Local Storage
+  shared_preferences: ^2.2.2
+  
+  # Step Counter
+  pedometer: ^4.0.2
 
 dev_dependencies:
   flutter_test:

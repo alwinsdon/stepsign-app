@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import '../widgets/heatmap_full.dart';
 import '../widgets/imu_orientation_mini.dart';
 import '../services/ble_service.dart';
+import '../services/api_service.dart';
 import '../models/sensor_data.dart';
 
 class LiveSessionScreen extends StatefulWidget {
@@ -21,12 +22,21 @@ class LiveSessionScreen extends StatefulWidget {
 class _LiveSessionScreenState extends State<LiveSessionScreen> {
   final BleService _bleService = BleService();
   
+  // User's Sui wallet address
+  static const String _walletAddress = '0x1dc9a65345a98cba3437f1b6c6ef8d81d6c7f3e24e6bd942e20f26c41d7c08f4';
+  
   int _sessionSeconds = 0;
   int _stepCount = 0;
   String _currentGesture = 'Idle';
   double _confidence = 0.0;
   String _cheatStatus = 'verified';
   double _hapticIntensity = 0.5;
+  
+  // Session tracking
+  late int _sessionStartTime;
+  bool _sessionEnded = false;
+  bool _isUploading = false;
+  int? _uploadedSessionId;
   
   Timer? _sessionTimer;
   StreamSubscription? _sensorSubscription;
@@ -68,6 +78,9 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
   }
 
   void _startSession() {
+    // Record session start time
+    _sessionStartTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    
     // Session timer
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
@@ -184,7 +197,268 @@ class _LiveSessionScreenState extends State<LiveSessionScreen> {
     // Strong haptic to indicate session ended
     _bleService.strongHaptic();
     
-    widget.onBack();
+    setState(() {
+      _sessionEnded = true;
+    });
+    
+    // Show session results dialog
+    _showSessionResultsDialog();
+  }
+  
+  void _showSessionResultsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.check_circle, color: Color(0xFF22C55E)),
+            ),
+            const SizedBox(width: 12),
+            const Text('Session Complete!', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  _ResultRow(label: 'Duration', value: _formatTime(_sessionSeconds)),
+                  const SizedBox(height: 12),
+                  _ResultRow(label: 'Steps', value: '$_stepCount'),
+                  const SizedBox(height: 12),
+                  _ResultRow(
+                    label: 'STEP Reward',
+                    value: '$_stepCount STEP',
+                    valueColor: const Color(0xFF22C55E),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _stepCount >= 100
+                  ? 'You earned $_stepCount STEP tokens!'
+                  : 'Minimum 10 steps required to claim rewards.',
+              style: TextStyle(
+                color: _stepCount >= 100 ? const Color(0xFF22C55E) : const Color(0xFFF59E0B),
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onBack();
+            },
+            child: const Text('Close', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          if (_stepCount >= 100)
+            ElevatedButton(
+              onPressed: _isUploading ? null : () {
+                Navigator.pop(context);
+                _uploadAndClaim();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF22C55E),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: _isUploading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Claim STEP Tokens'),
+            ),
+        ],
+      ),
+    );
+  }
+  
+  Future<void> _uploadAndClaim() async {
+    setState(() {
+      _isUploading = true;
+    });
+    
+    // Calculate session end time
+    final endTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final deviceId = _bleService.connectedDevice?.remoteId.toString() ?? 'ESP32_STEPSIGN';
+    
+    // Estimate distance (avg stride length ~0.8m)
+    final distance = _stepCount * 0.8;
+    final cadence = _sessionSeconds > 0 ? (_stepCount / _sessionSeconds) * 60 : 0.0;
+    final calories = _stepCount * 0.04; // Rough estimate
+    
+    try {
+      // Upload session
+      final session = await ApiService.uploadSession(
+        deviceId: deviceId,
+        startTime: _sessionStartTime,
+        endTime: endTime,
+        totalSteps: _stepCount,
+        totalDistance: distance,
+        avgCadence: cadence,
+        caloriesBurned: calories,
+      );
+      
+      if (session != null) {
+        _uploadedSessionId = session['id'];
+        
+        // Create claim
+        final claimResult = await ApiService.createClaim(
+          sessionId: _uploadedSessionId!,
+          userWallet: _walletAddress,
+        );
+        
+        setState(() {
+          _isUploading = false;
+        });
+        
+        if (claimResult != null && claimResult['success'] == true) {
+          _showClaimSuccessDialog(claimResult['claim']);
+        } else {
+          _showErrorDialog(claimResult?['error'] ?? 'Failed to create claim');
+        }
+      } else {
+        setState(() {
+          _isUploading = false;
+        });
+        _showErrorDialog('Failed to upload session. Is backend running?');
+      }
+    } catch (e) {
+      setState(() {
+        _isUploading = false;
+      });
+      _showErrorDialog('Error: $e');
+    }
+  }
+  
+  void _showClaimSuccessDialog(Map<String, dynamic> claim) {
+    final rewardAmount = (claim['reward_amount'] as int) / 1000000;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.celebration, color: Color(0xFF22C55E)),
+            ),
+            const SizedBox(width: 12),
+            const Text('Claim Submitted!', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${rewardAmount.toStringAsFixed(0)} STEP',
+              style: const TextStyle(
+                color: Color(0xFF22C55E),
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'tokens will be sent to your wallet',
+              style: TextStyle(color: Color(0xFF94A3B8)),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule, color: Color(0xFFF59E0B), size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Status: ${claim['status']}\nClaim ID: ${claim['id']}',
+                      style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onBack();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF06B6D4),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showErrorDialog(String error) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Color(0xFFEF4444)),
+            SizedBox(width: 12),
+            Text('Error', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          error,
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onBack();
+            },
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _testHaptic() {
@@ -791,5 +1065,37 @@ class _WaveformPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _WaveformPainter oldDelegate) {
     return true; // Always repaint for real-time updates
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _ResultRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
   }
 }

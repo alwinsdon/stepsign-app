@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:pedometer/pedometer.dart';
+import 'dart:async';
 import '../widgets/heatmap_mini.dart';
 import '../widgets/gradient_button.dart';
+import '../services/storage_service.dart';
+import '../services/wallet_service.dart';
+import '../services/ble_service.dart';
+import '../models/sensor_data.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final Function(String) onNavigate;
   final bool isPaired;
 
@@ -11,6 +17,103 @@ class DashboardScreen extends StatelessWidget {
     required this.onNavigate,
     required this.isPaired,
   });
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  int _steps = 0;
+  double _distance = 0.0;
+  int _calories = 0;
+  int _activeMinutes = 0;
+  double _tokenBalance = 0.0;
+  String _userName = 'User';
+  bool _isLoading = true;
+  
+  // BLE sensor data
+  final BleService _bleService = BleService();
+  Map<String, double>? _sensorData;
+  StreamSubscription<SensorFrame>? _sensorSubscription;
+  
+  StreamSubscription<StepCount>? _stepCountStream;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+    _loadTokenBalance();
+    _initPedometer();
+    _initBleSubscription();
+  }
+  
+  @override
+  void dispose() {
+    _stepCountStream?.cancel();
+    _sensorSubscription?.cancel();
+    super.dispose();
+  }
+  
+  void _initBleSubscription() {
+    // Subscribe to BLE sensor data if device is connected
+    _sensorSubscription = _bleService.sensorDataStream.listen((frame) {
+      if (mounted) {
+        setState(() {
+          _sensorData = frame.pressureMap;
+        });
+      }
+    });
+  }
+  
+  Future<void> _loadUserData() async {
+    final userName = StorageService.userName;
+    setState(() {
+      _userName = userName ?? 'User';
+    });
+  }
+  
+  Future<void> _loadTokenBalance() async {
+    final walletAddress = StorageService.walletAddress;
+    if (walletAddress != null && walletAddress.isNotEmpty) {
+      try {
+        final walletData = await WalletService.getWalletBalance(walletAddress);
+        setState(() {
+          _tokenBalance = (walletData['balance'] ?? 0) / 1000000; // Convert from micro-STEP
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('Error loading token balance: $e');
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+  
+  void _initPedometer() {
+    _stepCountStream = Pedometer.stepCountStream.listen(
+      _onStepCount,
+      onError: _onStepCountError,
+    );
+  }
+  
+  void _onStepCount(StepCount event) {
+    setState(() {
+      _steps = event.steps;
+      // Calculate derived metrics
+      _distance = (_steps * 0.762) / 1000; // Average stride ~0.762m, convert to km
+      _calories = (_steps * 0.04).round(); // ~0.04 cal per step
+      _activeMinutes = (_steps / 100).round(); // Rough estimate
+    });
+  }
+  
+  void _onStepCountError(error) {
+    print('Pedometer error: $error');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,13 +139,13 @@ class DashboardScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Alex Thompson',
+                        _userName,
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                     ],
                   ),
                   IconButton(
-                    onPressed: () => onNavigate('settings'),
+                    onPressed: () => widget.onNavigate('settings'),
                     icon: const Icon(Icons.settings_outlined),
                     color: const Color(0xFF94A3B8),
                   ),
@@ -57,7 +160,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _StatCard(
                       icon: Icons.directions_walk,
                       label: 'Steps',
-                      value: '8,547',
+                      value: _steps.toString(),
                       color: const Color(0xFF06B6D4),
                     ),
                   ),
@@ -66,7 +169,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _StatCard(
                       icon: Icons.timer_outlined,
                       label: 'Active',
-                      value: '42 min',
+                      value: '$_activeMinutes min',
                       color: const Color(0xFFA855F7),
                     ),
                   ),
@@ -79,7 +182,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _StatCard(
                       icon: Icons.local_fire_department_outlined,
                       label: 'Calories',
-                      value: '324',
+                      value: _calories.toString(),
                       color: const Color(0xFFF59E0B),
                     ),
                   ),
@@ -88,7 +191,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _StatCard(
                       icon: Icons.straighten_outlined,
                       label: 'Distance',
-                      value: '4.2 mi',
+                      value: '${_distance.toStringAsFixed(1)} km',
                       color: const Color(0xFF22C55E),
                     ),
                   ),
@@ -117,7 +220,7 @@ class DashboardScreen extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         Text(
-                          '85%',
+                          '${((_steps / 10000) * 100).clamp(0, 100).toStringAsFixed(0)}%',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 color: const Color(0xFF06B6D4),
                               ),
@@ -128,7 +231,7 @@ class DashboardScreen extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: LinearProgressIndicator(
-                        value: 0.85,
+                        value: (_steps / 10000).clamp(0.0, 1.0),
                         minHeight: 8,
                         backgroundColor: const Color(0xFF334155),
                         valueColor: const AlwaysStoppedAnimation<Color>(
@@ -138,7 +241,7 @@ class DashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '8,547 / 10,000 steps',
+                      '$_steps / 10,000 steps',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: const Color(0xFF94A3B8),
                           ),
@@ -148,30 +251,31 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 32),
 
-              // Live Sensor Preview
-              if (isPaired) ...[
-                Text(
-                  'Live Sensor Preview',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B).withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: const Color(0xFF334155).withOpacity(0.5),
-                    ),
+              // Live Sensor Preview - Always show for demo
+              Text(
+                'Live Sensor Preview',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF334155).withOpacity(0.5),
                   ),
-                  child: const HeatmapMini(isActive: true),
                 ),
-                const SizedBox(height: 32),
-              ],
+                child: HeatmapMini(
+                  isActive: _steps > 0 || _sensorData != null,
+                  sensorData: _sensorData,
+                ),
+              ),
+              const SizedBox(height: 32),
 
               // Wallet Summary
               GestureDetector(
-                onTap: () => onNavigate('wallet'),
+                onTap: () => widget.onNavigate('wallet'),
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -222,7 +326,9 @@ class DashboardScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '262.5 STEP',
+                              _isLoading 
+                                ? 'Loading...' 
+                                : '${_tokenBalance.toStringAsFixed(1)} STEP',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ],
@@ -244,21 +350,21 @@ class DashboardScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              if (!isPaired)
+              if (!widget.isPaired)
                 GradientButton(
-                  onPressed: () => onNavigate('pairing'),
+                  onPressed: () => widget.onNavigate('pairing'),
                   text: 'Pair Insoles',
                   icon: Icons.bluetooth,
                 )
               else ...[
                 GradientButton(
-                  onPressed: () => onNavigate('live'),
+                  onPressed: () => widget.onNavigate('live'),
                   text: 'Start Session',
                   icon: Icons.play_arrow,
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: () => onNavigate('pairing'),
+                  onPressed: () => widget.onNavigate('pairing'),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 56),
                     side: const BorderSide(color: Color(0xFF334155)),
@@ -290,7 +396,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _NavButton(
                       icon: Icons.analytics_outlined,
                       label: 'Analytics',
-                      onTap: () => onNavigate('analytics'),
+                      onTap: () => widget.onNavigate('analytics'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -298,7 +404,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _NavButton(
                       icon: Icons.threed_rotation_outlined,
                       label: '3D View',
-                      onTap: () => onNavigate('3d'),
+                      onTap: () => widget.onNavigate('3d'),
                     ),
                   ),
                 ],
@@ -310,7 +416,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _NavButton(
                       icon: Icons.flag_outlined,
                       label: 'Goals',
-                      onTap: () => onNavigate('goals'),
+                      onTap: () => widget.onNavigate('goals'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -318,7 +424,7 @@ class DashboardScreen extends StatelessWidget {
                     child: _NavButton(
                       icon: Icons.account_balance_wallet_outlined,
                       label: 'Wallet',
-                      onTap: () => onNavigate('wallet'),
+                      onTap: () => widget.onNavigate('wallet'),
                     ),
                   ),
                 ],

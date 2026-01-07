@@ -9,9 +9,13 @@ import 'screens/viewer_3d_screen.dart';
 import 'screens/goals_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/storage_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize storage service
+  await StorageService.init();
   
   // Set status bar to transparent
   SystemChrome.setSystemUIOverlayStyle(
@@ -57,18 +61,46 @@ class AppNavigator extends StatefulWidget {
 }
 
 class _AppNavigatorState extends State<AppNavigator> {
-  String _currentScreen = 'onboarding';
+  String _currentScreen = 'loading';
   bool _hasCompletedOnboarding = false;
   bool _isPaired = false;
 
-  void _handleOnboardingComplete() {
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedState();
+  }
+
+  Future<void> _loadSavedState() async {
+    // Load persisted state
+    _hasCompletedOnboarding = StorageService.hasCompletedOnboarding;
+    _isPaired = StorageService.isDevicePaired;
+    
+    // Determine initial screen based on saved state
+    String initialScreen;
+    if (!_hasCompletedOnboarding) {
+      initialScreen = 'onboarding';
+    } else if (!_isPaired) {
+      initialScreen = 'pairing';
+    } else {
+      initialScreen = 'dashboard';
+    }
+    
+    setState(() {
+      _currentScreen = initialScreen;
+    });
+  }
+
+  void _handleOnboardingComplete() async {
+    await StorageService.setOnboardingCompleted(true);
     setState(() {
       _hasCompletedOnboarding = true;
       _currentScreen = 'pairing';
     });
   }
 
-  void _handlePairingComplete() {
+  void _handlePairingComplete() async {
+    await StorageService.setDevicePaired(true);
     setState(() {
       _isPaired = true;
       _currentScreen = 'dashboard';
@@ -78,6 +110,14 @@ class _AppNavigatorState extends State<AppNavigator> {
   void _navigateToScreen(String screen) {
     setState(() {
       _currentScreen = screen;
+    });
+  }
+
+  void _handleAppReset() {
+    setState(() {
+      _hasCompletedOnboarding = false;
+      _isPaired = false;
+      _currentScreen = 'onboarding';
     });
   }
 
@@ -101,6 +141,14 @@ class _AppNavigatorState extends State<AppNavigator> {
 
   Widget _buildCurrentScreen() {
     switch (_currentScreen) {
+      case 'loading':
+        return const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF06B6D4),
+            ),
+          ),
+        );
       case 'onboarding':
         return OnboardingScreen(onComplete: _handleOnboardingComplete);
       case 'pairing':
@@ -136,6 +184,7 @@ class _AppNavigatorState extends State<AppNavigator> {
       case 'settings':
         return SettingsScreen(
           onBack: () => _navigateToScreen('dashboard'),
+          onResetApp: _handleAppReset,
         );
       default:
         return DashboardScreen(
